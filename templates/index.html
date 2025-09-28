@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <title>Monitor de Ping</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    <h1>Monitor de Ping – {{ host }}</h1>
+
+    <div class="stats">
+        <p><strong>Ping Atual:</strong> <span id="currentPing">--</span> ms</p>
+        <p><strong>Download:</strong> <span id="downloadSpeed">--</span> Mbps</p>
+        <p><strong>Upload:</strong> <span id="uploadSpeed">--</span> Mbps</p>
+        <p><strong>Quedas Hoje:</strong> <span id="quedasHoje">--</span></p>
+        <p><strong>Quedas 3 Dias:</strong> <span id="quedas3dias">--</span></p>
+        <p><strong>Total de Quedas:</strong> <span id="quedasTotal">--</span></p>
+    </div>
+
+    <canvas id="pingChart"></canvas>
+
+    <script src="/static/js/script.js"></script>
+</body>
+</html>
