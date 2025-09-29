@@ -22,11 +22,10 @@ def ping_loop(data_lock, ping_status, ping_data):
 
             # Atualiza ping_status mesmo que falhe
             with data_lock:
-                ping_status[rede]["current_ping"] = round(latency, 2) if latency else 0
-                ping_data[rede].append({"time": timestamp, "latency": latency if latency else 0})
+                ping_status[rede]["current_ping"] = round(latency, 2) if latency else None
+                ping_data[rede].append({"time": timestamp, "latency": latency if latency else None})
                 if len(ping_data[rede]) > 180:
                     ping_data[rede].pop(0)
-
             # Logs CSV e DB
             log_filename = now.strftime(f"{LOG_DIR}/{rede}_%Y-%m-%d.csv")
             with open(log_filename, "a") as f:
@@ -63,15 +62,25 @@ def ping_loop(data_lock, ping_status, ping_data):
             last_speedtest = time.time()
 
         # Médias a cada 5 minutos
+        # Médias a cada 5 minutos
         if time.time() - last_avg_calc > 300:
             for rede in HOSTS.keys():
-                avg_ping = round(sum(buffers[rede]["ping"]) / len(buffers[rede]["ping"]), 2) if buffers[rede]["ping"] else 0
-                avg_download = round(sum(buffers[rede]["download"]) / len(buffers[rede]["download"]), 2) if buffers[rede]["download"] else 0
-                avg_upload = round(sum(buffers[rede]["upload"]) / len(buffers[rede]["upload"]), 2) if buffers[rede]["upload"] else 0
+                # filtra apenas valores válidos (>0)
+                valid_pings = [p for p in buffers[rede]["ping"] if p > 0]
+                valid_down = [d for d in buffers[rede]["download"] if d > 0]
+                valid_up = [u for u in buffers[rede]["upload"] if u > 0]
+
+                avg_ping = round(sum(valid_pings) / len(valid_pings), 2) if valid_pings else 0
+                avg_download = round(sum(valid_down) / len(valid_down), 2) if valid_down else 0
+                avg_upload = round(sum(valid_up) / len(valid_up), 2) if valid_up else 0
+
                 save_avg_metrics(full_timestamp, avg_ping, avg_download, avg_upload, rede)
+
                 buffers[rede]["ping"].clear()
                 buffers[rede]["download"].clear()
                 buffers[rede]["upload"].clear()
+
             last_avg_calc = time.time()
+
 
         time.sleep(1)
