@@ -6,12 +6,9 @@ from database import save_ping, save_outage, save_avg_metrics
 from metrics import ping_host, medir_speedtest
 
 def ping_loop(data_lock, ping_status, ping_data):
-    buffers = {
-        "prefeitura": {"ping": [], "download": [], "upload": []},
-        "conectada": {"ping": [], "download": [], "upload": []}
-    }
-    failures = {"prefeitura": 0, "conectada": 0}
-    fall_start_time = {"prefeitura": None, "conectada": None}
+    buffers = {rede: {"ping": [], "download": [], "upload": []} for rede in HOSTS}
+    failures = {rede: 0 for rede in HOSTS}
+    fall_start_time = {rede: None for rede in HOSTS}
     last_speedtest = 0
     last_avg_calc = 0
 
@@ -39,7 +36,7 @@ def ping_loop(data_lock, ping_status, ping_data):
                 if len(ping_data[rede]) > 180:
                     ping_data[rede].pop(0)
 
-            # Buffer
+            # Buffers para médias
             if latency is not None:
                 buffers[rede]["ping"].append(latency)
             if ping_status[rede]["download"] > 0:
@@ -60,13 +57,13 @@ def ping_loop(data_lock, ping_status, ping_data):
                 failures[rede] = 0
                 fall_start_time[rede] = None
 
-        # Speedtest a cada 2min
+        # Speedtest a cada 2 minutos
         if time.time() - last_speedtest > 120:
             for rede in HOSTS.keys():
                 medir_speedtest(data_lock, ping_status, rede)
             last_speedtest = time.time()
 
-        # Médias a cada 5min
+        # Médias a cada 5 minutos
         if time.time() - last_avg_calc > 300:
             for rede in HOSTS.keys():
                 avg_ping = round(sum(buffers[rede]["ping"]) / len(buffers[rede]["ping"]), 2) if buffers[rede]["ping"] else 0
