@@ -16,7 +16,7 @@ def ping_host(host):
 
 def medir_speedtest(data_lock, ping_status, rede):
     try:
-        s = speedtest.Speedtest()
+        s = speedtest.speedtest()
         s.get_best_server()
         download = round(s.download() / 1_000_000, 2)
         upload = round(s.upload() / 1_000_000, 2)
