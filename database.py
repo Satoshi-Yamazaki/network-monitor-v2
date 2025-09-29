@@ -8,7 +8,6 @@ def init_db():
     c = conn.cursor()
 
     for iface in INTERFACES:
-        # Ping logs separados
         c.execute(f"""
         CREATE TABLE IF NOT EXISTS ping_log_{iface} (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -16,8 +15,6 @@ def init_db():
             latency REAL,
             status TEXT
         )""")
-
-        # Outages separados
         c.execute(f"""
         CREATE TABLE IF NOT EXISTS outages_{iface} (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -25,8 +22,6 @@ def init_db():
             end_time TEXT,
             duration INTEGER
         )""")
-
-        # Speedtest separados
         c.execute(f"""
         CREATE TABLE IF NOT EXISTS speedtest_{iface} (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -35,8 +30,6 @@ def init_db():
             upload REAL,
             ping REAL
         )""")
-
-        # Médias separadas
         c.execute(f"""
         CREATE TABLE IF NOT EXISTS metrics_avg_{iface} (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -45,13 +38,10 @@ def init_db():
             avg_download REAL,
             avg_upload REAL
         )""")
-
     conn.commit()
     conn.close()
 
-# =========================
-# Funções de inserção
-# =========================
+# Inserção
 def save_ping(timestamp, latency, status, interface):
     conn = sqlite3.connect(DB_FILE)
     conn.execute(f"INSERT INTO ping_log_{interface} (timestamp, latency, status) VALUES (?, ?, ?)",
@@ -80,9 +70,6 @@ def save_avg_metrics(timestamp, avg_ping, avg_download, avg_upload, interface):
     conn.commit()
     conn.close()
 
-# =========================
-# Função de contagem de quedas
-# =========================
 def contar_quedas(interface):
     import datetime
     hoje = datetime.datetime.now().date()
@@ -91,13 +78,10 @@ def contar_quedas(interface):
     c = conn.cursor()
 
     table = f"outages_{interface}"
-
     c.execute(f"SELECT COUNT(*) FROM {table}")
     total = c.fetchone()[0]
-
     c.execute(f"SELECT COUNT(*) FROM {table} WHERE DATE(start_time)=?", (hoje,))
     hoje_count = c.fetchone()[0]
-
     c.execute(f"SELECT COUNT(*) FROM {table} WHERE DATE(start_time)>=?", (dias3,))
     dias3_count = c.fetchone()[0]
 

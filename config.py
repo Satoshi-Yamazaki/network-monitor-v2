@@ -11,9 +11,6 @@ HOSTS = {
 }
 
 # Mapear nomes lógicos para interfaces do sistema
-# Ajuste os nomes conforme necessário:
-# - "enp0s3" = Cabo (Prefeitura)
-# - "enp0s8" = Wi-Fi (Conectada)
 INTERFACES = {
     "prefeitura": "enp0s3",
     "conectada": "enp0s8"
