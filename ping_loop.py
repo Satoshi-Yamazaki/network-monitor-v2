@@ -1,85 +1,85 @@
 import datetime
 import time
-from config import INTERFACES, LOG_DIR, HOST
+import threading
+from config import HOSTS, LOG_DIR
 from database import save_ping, save_outage, save_avg_metrics
 from metrics import ping_host, medir_speedtest
 
 def ping_loop(data_lock, ping_status, ping_data):
-    consecutive_failures = {iface: 0 for iface in INTERFACES}
-    fall_start_time = {iface: None for iface in INTERFACES}
-    ping_buffer = {iface: [] for iface in INTERFACES}
-    download_buffer = {iface: [] for iface in INTERFACES}
-    upload_buffer = {iface: [] for iface in INTERFACES}
-    last_speedtest = {iface: 0 for iface in INTERFACES}
-    last_avg_calc = {iface: 0 for iface in INTERFACES}
+    buffers = {
+        "prefeitura": {"ping": [], "download": [], "upload": []},
+        "conectada": {"ping": [], "download": [], "upload": []}
+    }
+    failures = {"prefeitura": 0, "conectada": 0}
+    fall_start_time = {"prefeitura": None, "conectada": None}
+    last_speedtest = 0
+    last_avg_calc = 0
 
     while True:
-        now = datetime.datetime.datetime.now()
+        now = datetime.datetime.now()
         timestamp = now.strftime("%H:%M:%S")
         full_timestamp = now.strftime("%Y-%m-%d %H:%M:%S")
 
-        for iface_name, iface_dev in INTERFACES.items():
-            # ping usando interface física
-            latency = ping_host(HOST, interface=iface_dev)
+        for rede, host in HOSTS.items():
+            latency = ping_host(host)
             status = "ok" if latency is not None else "fail"
 
-            # CSV log por interface
-            log_filename = now.strftime(f"{LOG_DIR}/{iface_name}_%Y-%m-%d.csv")
+            # CSV separado por rede
+            log_filename = now.strftime(f"{LOG_DIR}/{rede}_%Y-%m-%d.csv")
             with open(log_filename, "a") as f:
-                f.write(f"{full_timestamp},{latency if latency is not None else 'timeout'},{status}\n")
+                f.write(f"{full_timestamp},{latency if latency else 'timeout'},{status}\n")
 
             # DB
-            save_ping(iface_name, full_timestamp, latency, status)
+            save_ping(full_timestamp, latency, status, rede)
 
-            # Update memória (protegido por lock)
+            # Memória
             with data_lock:
-                ping_status[iface_name]["current_ping"] = round(latency, 2) if latency is not None else 0
-                ping_data[iface_name].append({
-                    "time": timestamp,
-                    "latency": latency if latency is not None else 0,
-                    "download": ping_status[iface_name].get("download", 0),
-                    "upload": ping_status[iface_name].get("upload", 0)
-                })
-                if len(ping_data[iface_name]) > 180:
-                    ping_data[iface_name].pop(0)
+                ping_status[rede]["current_ping"] = round(latency, 2) if latency else 0
+                ping_data[rede].append({"time": timestamp, "latency": latency if latency else 0})
+                if len(ping_data[rede]) > 180:
+                    ping_data[rede].pop(0)
 
-            # Buffers para médias
+            # Buffer
             if latency is not None:
-                ping_buffer[iface_name].append(latency)
-            if ping_status[iface_name].get("download", 0) > 0:
-                download_buffer[iface_name].append(ping_status[iface_name]["download"])
-            if ping_status[iface_name].get("upload", 0) > 0:
-                upload_buffer[iface_name].append(ping_status[iface_name]["upload"])
+                buffers[rede]["ping"].append(latency)
+            if ping_status[rede]["download"] > 0:
+                buffers[rede]["download"].append(ping_status[rede]["download"])
+            if ping_status[rede]["upload"] > 0:
+                buffers[rede]["upload"].append(ping_status[rede]["upload"])
 
-            # Detecta quedas
+            # Quedas
             if latency is None:
-                consecutive_failures[iface_name] += 1
-                if consecutive_failures[iface_name] == 10:
-                    fall_start_time[iface_name] = datetime.datetime.now() - datetime.timedelta(seconds=9)
+                failures[rede] += 1
+                if failures[rede] == 10:
+                    fall_start_time[rede] = datetime.datetime.now() - datetime.timedelta(seconds=9)
             else:
-                if consecutive_failures[iface_name] >= 10 and fall_start_time[iface_name]:
+                if failures[rede] >= 10 and fall_start_time[rede]:
                     fall_end_time = datetime.datetime.now()
-                    duration = int((fall_end_time - fall_start_time[iface_name]).total_seconds())
-                    save_outage(iface_name, fall_start_time[iface_name].isoformat(), fall_end_time.isoformat(), duration)
-                consecutive_failures[iface_name] = 0
-                fall_start_time[iface_name] = None
+                    duration = int((fall_end_time - fall_start_time[rede]).total_seconds())
+                    save_outage(fall_start_time[rede].isoformat(), fall_end_time.isoformat(), duration, rede)
+                failures[rede] = 0
+                fall_start_time[rede] = None
 
-            # Speedtest a cada 2 minutos por interface
-            if time.time() - last_speedtest[iface_name] > 120:
-                medir_speedtest(iface_name, data_lock, ping_status)
-                last_speedtest[iface_name] = time.time()
+        # Speedtest a cada 2min
+        if time.time() - last_speedtest > 120:
+            for rede in HOSTS.keys():
+                medir_speedtest(data_lock, ping_status, rede)
+            last_speedtest = time.time()
 
-            # Salva médias a cada 5 minutos por interface
-            if time.time() - last_avg_calc[iface_name] > 300:
-                avg_ping = round(sum(ping_buffer[iface_name]) / len(ping_buffer[iface_name]), 2) if ping_buffer[iface_name] else 0
-                avg_download = round(sum(download_buffer[iface_name]) / len(download_buffer[iface_name]), 2) if download_buffer[iface_name] else 0
-                avg_upload = round(sum(upload_buffer[iface_name]) / len(upload_buffer[iface_name]), 2) if upload_buffer[iface_name] else 0
+        # Médias a cada 5min
+        if time.time() - last_avg_calc > 300:
+            for rede in HOSTS.keys():
+                avg_ping = round(sum(buffers[rede]["ping"]) / len(buffers[rede]["ping"]), 2) if buffers[rede]["ping"] else 0
+                avg_download = round(sum(buffers[rede]["download"]) / len(buffers[rede]["download"]), 2) if buffers[rede]["download"] else 0
+                avg_upload = round(sum(buffers[rede]["upload"]) / len(buffers[rede]["upload"]), 2) if buffers[rede]["upload"] else 0
 
-                save_avg_metrics(iface_name, full_timestamp, avg_ping, avg_download, avg_upload)
+                save_avg_metrics(full_timestamp, avg_ping, avg_download, avg_upload, rede)
+                print(f"[{full_timestamp}] [{rede}] Médias salvas -> Ping: {avg_ping} ms, Down: {avg_download} Mbps, Up: {avg_upload} Mbps")
 
-                ping_buffer[iface_name].clear()
-                download_buffer[iface_name].clear()
-                upload_buffer[iface_name].clear()
-                last_avg_calc[iface_name] = time.time()
+                buffers[rede]["ping"].clear()
+                buffers[rede]["download"].clear()
+                buffers[rede]["upload"].clear()
+
+            last_avg_calc = time.time()
 
         time.sleep(1)
