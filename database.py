@@ -6,81 +6,83 @@ def init_db():
     os.makedirs(LOG_DIR, exist_ok=True)
     conn = sqlite3.connect(DB_FILE)
     c = conn.cursor()
-    c.execute("""
-    CREATE TABLE IF NOT EXISTS ping_log (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        timestamp TEXT,
-        latency REAL,
-        status TEXT
-    )""")
-    c.execute("""
-    CREATE TABLE IF NOT EXISTS outages (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        start_time TEXT,
-        end_time TEXT,
-        duration INTEGER
-    )""")
-    c.execute("""
-    CREATE TABLE IF NOT EXISTS speedtest (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        timestamp TEXT,
-        download REAL,
-        upload REAL,
-        ping REAL
-    )""")
-    c.execute("""
-    CREATE TABLE IF NOT EXISTS metrics_avg (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        timestamp TEXT,
-        avg_ping REAL,
-        avg_download REAL,
-        avg_upload REAL
-    )""")
+
+    for iface in ["prefeitura", "conectada"]:
+        c.execute(f"""
+        CREATE TABLE IF NOT EXISTS ping_log_{iface} (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            timestamp TEXT,
+            latency REAL,
+            status TEXT
+        )""")
+        c.execute(f"""
+        CREATE TABLE IF NOT EXISTS outages_{iface} (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            start_time TEXT,
+            end_time TEXT,
+            duration INTEGER
+        )""")
+        c.execute(f"""
+        CREATE TABLE IF NOT EXISTS speedtest_{iface} (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            timestamp TEXT,
+            download REAL,
+            upload REAL,
+            ping REAL
+        )""")
+        c.execute(f"""
+        CREATE TABLE IF NOT EXISTS metrics_avg_{iface} (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            timestamp TEXT,
+            avg_ping REAL,
+            avg_download REAL,
+            avg_upload REAL
+        )""")
     conn.commit()
     conn.close()
 
-def save_ping(timestamp, latency, status):
+def save_ping(iface, timestamp, latency, status):
     conn = sqlite3.connect(DB_FILE)
-    conn.execute("INSERT INTO ping_log (timestamp, latency, status) VALUES (?, ?, ?)",
-                 (timestamp, latency if latency else None, status))
+    conn.execute(f"INSERT INTO ping_log_{iface} (timestamp, latency, status) VALUES (?, ?, ?)",
+                 (timestamp, latency if latency is not None else None, status))
     conn.commit()
     conn.close()
 
-def save_outage(start_time, end_time, duration):
+def save_outage(iface, start_time, end_time, duration):
     conn = sqlite3.connect(DB_FILE)
-    conn.execute("INSERT INTO outages (start_time, end_time, duration) VALUES (?, ?, ?)",
+    conn.execute(f"INSERT INTO outages_{iface} (start_time, end_time, duration) VALUES (?, ?, ?)",
                  (start_time, end_time, duration))
     conn.commit()
     conn.close()
 
-def save_speedtest(timestamp, download, upload, ping):
+def save_speedtest(iface, timestamp, download, upload, ping):
     conn = sqlite3.connect(DB_FILE)
-    conn.execute("INSERT INTO speedtest (timestamp, download, upload, ping) VALUES (?, ?, ?, ?)",
+    conn.execute(f"INSERT INTO speedtest_{iface} (timestamp, download, upload, ping) VALUES (?, ?, ?, ?)",
                  (timestamp, download, upload, ping))
     conn.commit()
     conn.close()
 
-def save_avg_metrics(timestamp, avg_ping, avg_download, avg_upload):
+def save_avg_metrics(iface, timestamp, avg_ping, avg_download, avg_upload):
     conn = sqlite3.connect(DB_FILE)
-    conn.execute("INSERT INTO metrics_avg (timestamp, avg_ping, avg_download, avg_upload) VALUES (?, ?, ?, ?)",
+    conn.execute(f"INSERT INTO metrics_avg_{iface} (timestamp, avg_ping, avg_download, avg_upload) VALUES (?, ?, ?, ?)",
                  (timestamp, avg_ping, avg_download, avg_upload))
     conn.commit()
     conn.close()
 
-def contar_quedas():
+def contar_quedas(iface):
     import datetime
     hoje = datetime.datetime.now().date()
     dias3 = hoje - datetime.timedelta(days=2)
     conn = sqlite3.connect(DB_FILE)
     c = conn.cursor()
 
-    c.execute("SELECT COUNT(*) FROM outages")
+    c.execute(f"SELECT COUNT(*) FROM outages_{iface}")
     total = c.fetchone()[0]
 
-    c.execute("SELECT COUNT(*) FROM outages WHERE DATE(start_time)=?", (hoje,))
+    c.execute(f"SELECT COUNT(*) FROM outages_{iface} WHERE DATE(start_time)=?", (hoje,))
     hoje_count = c.fetchone()[0]
 
-    c.execute("SELECT COUNT(*) FROM outages WHERE DATE(start_time)>=?", (dias3,))
+    c.execute(f"SELECT COUNT(*) FROM outages_{iface} WHERE DATE(start_time)>=?", (dias3,))
     dias3_count = c.fetchone()[0]
 
     conn.close()

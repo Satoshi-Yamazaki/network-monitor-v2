@@ -1,6 +1,6 @@
-from flask import Flask, jsonify, render_template # type: ignore
+from flask import Flask, jsonify, render_template
 from database import contar_quedas
-from config import HOST
+from config import INTERFACES, HOST
 
 def create_app(ping_status, ping_data, data_lock):
     app = Flask(__name__)
@@ -12,12 +12,10 @@ def create_app(ping_status, ping_data, data_lock):
     @app.route("/data")
     def data():
         with data_lock:
-            stats = contar_quedas()
+            stats = {iface: contar_quedas(iface) for iface in INTERFACES}
             return jsonify({
                 "ping": ping_data,
-                "current_ping": ping_status["current_ping"],
-                "download": ping_status["download"],
-                "upload": ping_status["upload"],
+                "status": ping_status,
                 "stats": stats
             })
 
