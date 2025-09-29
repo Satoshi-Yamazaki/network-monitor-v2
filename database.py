@@ -7,26 +7,28 @@ def init_db():
     conn = sqlite3.connect(DB_FILE)
     c = conn.cursor()
 
-    # Criar tabelas separadas por interface
-    for name in INTERFACES.keys():
+    for iface in INTERFACES:
+        # Ping logs separados
         c.execute(f"""
-        CREATE TABLE IF NOT EXISTS ping_log_{name} (
+        CREATE TABLE IF NOT EXISTS ping_log_{iface} (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             timestamp TEXT,
             latency REAL,
             status TEXT
         )""")
 
+        # Outages separados
         c.execute(f"""
-        CREATE TABLE IF NOT EXISTS outages_{name} (
+        CREATE TABLE IF NOT EXISTS outages_{iface} (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             start_time TEXT,
             end_time TEXT,
             duration INTEGER
         )""")
 
+        # Speedtest separados
         c.execute(f"""
-        CREATE TABLE IF NOT EXISTS speedtest_{name} (
+        CREATE TABLE IF NOT EXISTS speedtest_{iface} (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             timestamp TEXT,
             download REAL,
@@ -34,8 +36,9 @@ def init_db():
             ping REAL
         )""")
 
+        # Médias separadas
         c.execute(f"""
-        CREATE TABLE IF NOT EXISTS metrics_avg_{name} (
+        CREATE TABLE IF NOT EXISTS metrics_avg_{iface} (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             timestamp TEXT,
             avg_ping REAL,
@@ -46,72 +49,61 @@ def init_db():
     conn.commit()
     conn.close()
 
-def _get_conn():
-    return sqlite3.connect(DB_FILE)
-
-# Generic save functions that accept interface name
-def save_ping(interface, timestamp, latency, status):
-    conn = _get_conn()
+# =========================
+# Funções de inserção
+# =========================
+def save_ping(timestamp, latency, status, interface):
+    conn = sqlite3.connect(DB_FILE)
     conn.execute(f"INSERT INTO ping_log_{interface} (timestamp, latency, status) VALUES (?, ?, ?)",
-                 (timestamp, latency if latency is not None else None, status))
+                 (timestamp, latency if latency else None, status))
     conn.commit()
     conn.close()
 
-def save_outage(interface, start_time, end_time, duration):
-    conn = _get_conn()
+def save_outage(start_time, end_time, duration, interface):
+    conn = sqlite3.connect(DB_FILE)
     conn.execute(f"INSERT INTO outages_{interface} (start_time, end_time, duration) VALUES (?, ?, ?)",
                  (start_time, end_time, duration))
     conn.commit()
     conn.close()
 
-def save_speedtest(interface, timestamp, download, upload, ping):
-    conn = _get_conn()
+def save_speedtest(timestamp, download, upload, ping, interface):
+    conn = sqlite3.connect(DB_FILE)
     conn.execute(f"INSERT INTO speedtest_{interface} (timestamp, download, upload, ping) VALUES (?, ?, ?, ?)",
                  (timestamp, download, upload, ping))
     conn.commit()
     conn.close()
 
-def save_avg_metrics(interface, timestamp, avg_ping, avg_download, avg_upload):
-    conn = _get_conn()
+def save_avg_metrics(timestamp, avg_ping, avg_download, avg_upload, interface):
+    conn = sqlite3.connect(DB_FILE)
     conn.execute(f"INSERT INTO metrics_avg_{interface} (timestamp, avg_ping, avg_download, avg_upload) VALUES (?, ?, ?, ?)",
                  (timestamp, avg_ping, avg_download, avg_upload))
     conn.commit()
     conn.close()
 
-# Contagem de quedas: retorna por interface e totals gerais
-def contar_quedas():
+# =========================
+# Função de contagem de quedas
+# =========================
+def contar_quedas(interface):
     import datetime
     hoje = datetime.datetime.now().date()
     dias3 = hoje - datetime.timedelta(days=2)
-
-    conn = _get_conn()
+    conn = sqlite3.connect(DB_FILE)
     c = conn.cursor()
 
-    result = {
-        "overall": {"quedas_total": 0, "quedas_hoje": 0, "quedas_3dias": 0},
-        "by_interface": {}
-    }
+    table = f"outages_{interface}"
 
-    # Por interface
-    for name in INTERFACES.keys():
-        c.execute(f"SELECT COUNT(*) FROM outages_{name}")
-        total = c.fetchone()[0] or 0
+    c.execute(f"SELECT COUNT(*) FROM {table}")
+    total = c.fetchone()[0]
 
-        c.execute(f"SELECT COUNT(*) FROM outages_{name} WHERE DATE(start_time)=?", (str(hoje),))
-        hoje_count = c.fetchone()[0] or 0
+    c.execute(f"SELECT COUNT(*) FROM {table} WHERE DATE(start_time)=?", (hoje,))
+    hoje_count = c.fetchone()[0]
 
-        c.execute(f"SELECT COUNT(*) FROM outages_{name} WHERE DATE(start_time)>=?", (str(dias3),))
-        dias3_count = c.fetchone()[0] or 0
-
-        result["by_interface"][name] = {
-            "quedas_total": total,
-            "quedas_hoje": hoje_count,
-            "quedas_3dias": dias3_count
-        }
-
-        result["overall"]["quedas_total"] += total
-        result["overall"]["quedas_hoje"] += hoje_count
-        result["overall"]["quedas_3dias"] += dias3_count
+    c.execute(f"SELECT COUNT(*) FROM {table} WHERE DATE(start_time)>=?", (dias3,))
+    dias3_count = c.fetchone()[0]
 
     conn.close()
-    return result
+    return {
+        "quedas_total": total,
+        "quedas_hoje": hoje_count,
+        "quedas_3dias": dias3_count
+    }
