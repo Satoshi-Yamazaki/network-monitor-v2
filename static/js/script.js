@@ -3,9 +3,15 @@ async function fetchData() {
         const res = await fetch('/data');
         const data = await res.json();
 
-        // Filtra latencies válidas (>0) para gráficos
-        const prefeituraPingData = data.prefeitura.ping.filter(d => d.latency > 0);
-        const conectadaPingData = data.conectada.ping.filter(d => d.latency > 0);
+        // Substitui 0 por null para falhas, mantendo o tempo
+        const prefeituraPingData = data.prefeitura.ping.map(d => ({
+            time: d.time,
+            latency: d.latency > 0 ? d.latency : null
+        }));
+        const conectadaPingData = data.conectada.ping.map(d => ({
+            time: d.time,
+            latency: d.latency > 0 ? d.latency : null
+        }));
 
         // Atualiza Prefeitura
         chartPrefeitura.data.labels = prefeituraPingData.map(d => d.time);
@@ -17,7 +23,7 @@ async function fetchData() {
         chartConectada.data.datasets[0].data = conectadaPingData.map(d => d.latency);
         chartConectada.update();
 
-        // Atualiza estatísticas, substituindo 0 por '--' quando offline
+        // Atualiza estatísticas, substituindo 0 ou null por '--'
         document.getElementById('currentPingPrefeitura').innerText = data.prefeitura.current_ping > 0 ? data.prefeitura.current_ping : '--';
         document.getElementById('downloadSpeedPrefeitura').innerText = data.prefeitura.download > 0 ? data.prefeitura.download : '--';
         document.getElementById('uploadSpeedPrefeitura').innerText = data.prefeitura.upload > 0 ? data.prefeitura.upload : '--';
