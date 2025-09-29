@@ -7,18 +7,35 @@
     <link rel="stylesheet" href="/static/css/style.css">
 </head>
 <body>
-    <h1>Monitor de Ping – {{ host }}</h1>
+    <h1>Monitor de Ping</h1>
 
-    <div class="stats">
-        <p><strong>Ping Atual:</strong> <span id="currentPing">--</span> ms</p>
-        <p><strong>Download:</strong> <span id="downloadSpeed">--</span> Mbps</p>
-        <p><strong>Upload:</strong> <span id="uploadSpeed">--</span> Mbps</p>
-        <p><strong>Quedas Hoje:</strong> <span id="quedasHoje">--</span></p>
-        <p><strong>Quedas 3 Dias:</strong> <span id="quedas3dias">--</span></p>
-        <p><strong>Total de Quedas:</strong> <span id="quedasTotal">--</span></p>
-    </div>
+    <!-- Bloco Prefeitura -->
+    <section class="block">
+        <div class="chart-container">
+            <h2>Prefeitura</h2>
+            <canvas id="chartPrefeitura"></canvas>
+        </div>
+        <div class="stats" id="statsPrefeitura">
+            <p><strong>Ping:</strong> <span id="prefeituraPing">--</span> ms</p>
+            <p><strong>Download:</strong> <span id="prefeituraDownload">--</span> Mbps</p>
+            <p><strong>Upload:</strong> <span id="prefeituraUpload">--</span> Mbps</p>
+            <p><strong>Quedas:</strong> <span id="prefeituraQuedas">--</span></p>
+        </div>
+    </section>
 
-    <canvas id="pingChart"></canvas>
+    <!-- Bloco Conectada -->
+    <section class="block">
+        <div class="chart-container">
+            <h2>Conectada</h2>
+            <canvas id="chartConectada"></canvas>
+        </div>
+        <div class="stats" id="statsConectada">
+            <p><strong>Ping:</strong> <span id="conectadaPing">--</span> ms</p>
+            <p><strong>Download:</strong> <span id="conectadaDownload">--</span> Mbps</p>
+            <p><strong>Upload:</strong> <span id="conectadaUpload">--</span> Mbps</p>
+            <p><strong>Quedas:</strong> <span id="conectadaQuedas">--</span></p>
+        </div>
+    </section>
 
     <script src="/static/js/script.js"></script>
 </body>
