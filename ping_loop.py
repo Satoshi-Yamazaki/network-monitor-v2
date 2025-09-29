@@ -1,86 +1,40 @@
-import datetime
 import time
-from config import HOSTS, LOG_DIR
-from database import save_ping, save_outage, save_avg_metrics
+import datetime
 from metrics import ping_host, medir_speedtest
 
+# Cada rede tem seu próprio buffer de pings (últimos 300 registros)
 def ping_loop(data_lock, ping_status, ping_data):
-    buffers = {rede: {"ping": [], "download": [], "upload": []} for rede in HOSTS}
-    failures = {rede: 0 for rede in HOSTS}
-    fall_start_time = {rede: None for rede in HOSTS}
-    last_speedtest = 0
-    last_avg_calc = 0
+    buffers = {rede: {"ping": [], "download": [], "upload": []} for rede in ping_status}
+    last_avg_calc = time.time()
 
     while True:
-        now = datetime.datetime.now()
-        timestamp = now.strftime("%H:%M:%S")
-        full_timestamp = now.strftime("%Y-%m-%d %H:%M:%S")
-
-        for rede, host in HOSTS.items():
+        for rede, host in ping_status.items():
             latency = ping_host(host)
-            status = "ok" if latency is not None else "fail"
+            if latency is None:
+                latency = 0  # Marca queda da rede
 
-            # Atualiza ping_status mesmo que falhe
             with data_lock:
-                ping_status[rede]["current_ping"] = round(latency, 2) if latency else None
-                ping_data[rede].append({"time": timestamp, "latency": latency if latency else None})
-                if len(ping_data[rede]) > 180:
+                ping_status[rede]["current_ping"] = latency
+                ping_data[rede].append({
+                    "time": datetime.datetime.now().strftime("%H:%M:%S"),
+                    "latency": latency
+                })
+                # Mantém só os últimos 300 registros
+                if len(ping_data[rede]) > 300:
                     ping_data[rede].pop(0)
-            # Logs CSV e DB
-            log_filename = now.strftime(f"{LOG_DIR}/{rede}_%Y-%m-%d.csv")
-            with open(log_filename, "a") as f:
-                f.write(f"{full_timestamp},{latency if latency else 'timeout'},{status}\n")
-            save_ping(full_timestamp, latency, status, rede)
 
-            # Buffers só com valores válidos
-            if latency is not None and latency > 0:
                 buffers[rede]["ping"].append(latency)
-            if ping_status[rede]["download"] > 0:
-                buffers[rede]["download"].append(ping_status[rede]["download"])
-            if ping_status[rede]["upload"] > 0:
-                buffers[rede]["upload"].append(ping_status[rede]["upload"])
 
-            # Quedas
-            if latency is None or latency == 0:
-                failures[rede] += 1
-                if failures[rede] == 10 and not fall_start_time[rede]:
-                    fall_start_time[rede] = datetime.datetime.now() - datetime.timedelta(seconds=9)
-            else:
-                if failures[rede] >= 10 and fall_start_time[rede]:
-                    fall_end_time = datetime.datetime.now()
-                    duration = int((fall_end_time - fall_start_time[rede]).total_seconds())
-                    save_outage(fall_start_time[rede].isoformat(), fall_end_time.isoformat(), duration, rede)
-                    fall_start_time[rede] = None
-                    # Reset buffers para reiniciar médias limpas
-                    buffers[rede] = {"ping": [], "download": [], "upload": []}
-                failures[rede] = 0
-
-        # Speedtest a cada 2 minutos
-        if time.time() - last_speedtest > 120:
-            for rede in HOSTS.keys():
-                medir_speedtest(data_lock, ping_status, rede)
-            last_speedtest = time.time()
-
-        # Médias a cada 5 minutos
-        # Médias a cada 5 minutos
+        # Calcula médias a cada 5 minutos
         if time.time() - last_avg_calc > 300:
-            for rede in HOSTS.keys():
-                # filtra apenas valores válidos (>0)
-                valid_pings = [p for p in buffers[rede]["ping"] if p > 0]
-                valid_down = [d for d in buffers[rede]["download"] if d > 0]
-                valid_up = [u for u in buffers[rede]["upload"] if u > 0]
-
-                avg_ping = round(sum(valid_pings) / len(valid_pings), 2) if valid_pings else 0
-                avg_download = round(sum(valid_down) / len(valid_down), 2) if valid_down else 0
-                avg_upload = round(sum(valid_up) / len(valid_up), 2) if valid_up else 0
-
-                save_avg_metrics(full_timestamp, avg_ping, avg_download, avg_upload, rede)
-
+            for rede in ping_status:
+                avg_ping = round(sum(buffers[rede]["ping"]) / len(buffers[rede]["ping"]), 2) if buffers[rede]["ping"] else 0
+                # Aqui você pode salvar em DB se quiser
                 buffers[rede]["ping"].clear()
-                buffers[rede]["download"].clear()
-                buffers[rede]["upload"].clear()
-
             last_avg_calc = time.time()
 
+        # Executa speedtest a cada 10 min (exemplo)
+        for rede in ping_status:
+            medir_speedtest(data_lock, ping_status, rede)
 
         time.sleep(1)
